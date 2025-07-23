@@ -1,26 +1,27 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import os
+import lime
+import lime.lime_tabular
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report
-import lime
-import lime.lime_tabular
-import os
 
-# 1. Carregar dados
+# === 1. Carregar dados ===
 colunas = [
     'status_conta', 'duração', 'histórico_crédito', 'propósito', 'valor_crédito',
     'conta_poupança', 'emprego_desde', 'taxa_parcelamento', 'sexo_estado_civil',
     'outros_devedores', 'tempo_residência', 'propriedade', 'idade', 'outros_planos',
-    'moradia', 'número_empréstimos', 'profissão', 'responsáveis', 'telefone', 'trabalhador_estrangeiro',
-    'alvo'
+    'habitação', 'número_empréstimos', 'profissão', 'responsáveis', 'telefone',
+    'trabalhador_estrangeiro', 'target'
 ]
-df = pd.read_csv("data/german.data", sep='\s+', header=None)
+
+df = pd.read_csv('data/german.data', sep=' ', header=None)
 df.columns = colunas
 
-# 2. Pré-processamento
+# === 2. Pré-processamento ===
 label_encoders = {}
 for col in df.columns:
     if df[col].dtype == 'object':
@@ -28,22 +29,25 @@ for col in df.columns:
         df[col] = le.fit_transform(df[col])
         label_encoders[col] = le
 
-X = df.drop("alvo", axis=1)
-y = df["alvo"]
+# Ajustar target para 0 = bom pagador, 1 = mau pagador
+df['target'] = df['target'].map({1: 1, 2: 0})
 
-# 3. Separar treino e teste
+# === 3. Separar features e target ===
+X = df.drop('target', axis=1)
+y = df['target']
+
+# === 4. Treino/teste ===
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# 4. Treinar modelo
-modelo = RandomForestClassifier(n_estimators=100, random_state=42)
-modelo.fit(X_train, y_train)
+# === 5. Modelo ===
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
 
-# 5. Avaliação
+# === 6. Avaliação ===
 print("Relatório de Classificação:\n")
-y_pred = modelo.predict(X_test)
-print(classification_report(y_test, y_pred))
+print(classification_report(y_test, model.predict(X_test)))
 
-# 6. Aplicar LIME
+# === 7. LIME ===
 explainer = lime.lime_tabular.LimeTabularExplainer(
     training_data=np.array(X_train),
     feature_names=X.columns.tolist(),
@@ -51,69 +55,64 @@ explainer = lime.lime_tabular.LimeTabularExplainer(
     mode='classification'
 )
 
-# Escolher uma instância para explicação
-i = 0
-instance = X_test.iloc[i]
-exp = explainer.explain_instance(instance.to_numpy(), modelo.predict_proba, num_features=10)
+idx = 0
+instance = X_test.iloc[idx]
+exp = explainer.explain_instance(instance.to_numpy(), model.predict_proba, num_features=10)
 
-# 7. Gráfico Explicativo com melhorias
-fig, ax = plt.subplots(figsize=(12, 7))  # Aumentado
+# === 8. Gráfico aprimorado ===
+os.makedirs('images', exist_ok=True)
+fig, ax = plt.subplots(figsize=(10, 7))
+
 exp_list = exp.as_list()
 features = [x[0] for x in exp_list]
 weights = [x[1] for x in exp_list]
-colors = ['orange' if val > 0 else 'blue' for val in weights]  # Laranja reforça Mau Pagador, Azul sugere Bom Pagador
+
+colors = ['orange' if val > 0 else 'blue' for val in weights]
 
 bars = ax.barh(features, weights, color=colors)
 ax.set_title("Explicação Local: Por que o modelo classificou como 'Mau Pagador'", fontsize=14)
 ax.set_xlabel("Contribuição para a decisão", fontsize=12)
 
-# Adicionar os valores nas barras
 for bar, val in zip(bars, weights):
-    ax.text(bar.get_width() + 0.01 * np.sign(bar.get_width()),
-            bar.get_y() + bar.get_height() / 2,
-            f"{val:.2f}",
-            va='center', fontsize=9, fontweight='bold')
+    ax.text(bar.get_width() + 0.005 * np.sign(bar.get_width()),
+            bar.get_y() + bar.get_height()/2,
+            f"{val:.2f}", va='center', fontweight='bold')
 
-# Legenda explicativa
-legend_text = (
+# Legenda
+legenda = (
     "🟧 Laranja: Características que reforçaram a decisão de negar o crédito.\n"
     "🟦 Azul: Características que sugerem que o crédito poderia ser concedido."
 )
 props = dict(boxstyle='round', facecolor='white', edgecolor='gray')
-plt.text(1.02, -0.1, legend_text, transform=ax.transAxes,
-         fontsize=9, bbox=props, verticalalignment='bottom')
+plt.text(1.05, -0.1, legenda, transform=ax.transAxes, fontsize=9, bbox=props)
 
 plt.tight_layout()
-os.makedirs("images", exist_ok=True)
-plt.savefig("images/lime_explicacao_amigavel.png", bbox_inches='tight')
+plt.savefig("images/lime_explanation_ptbr.png", bbox_inches='tight')
 plt.close()
 
-# 8. HTML traduzido e melhorado
-html_explicacao = """
-<div style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-  <h2>📊 O que este gráfico mostra?</h2>
+# === 9. HTML aprimorado ===
+html_intro = """
+<div style="font-family: sans-serif; padding: 20px; background: #f9f9f9;">
+  <h2 style="color:#111;"><img src="https://img.icons8.com/color/24/graph.png"/> O que este gráfico mostra?</h2>
   <p>Este gráfico explica de forma visual por que o modelo de IA classificou este cliente como <strong>Mau Pagador</strong>.</p>
-
   <ul>
-    <li><span style="color: orange; font-weight: bold;">🟧 Laranja</span>: fatores que <strong>reforçaram a decisão</strong> de negar o crédito.</li>
-    <li><span style="color: #1f77b4; font-weight: bold;">🟦 Azul</span>: fatores que <strong>apontam possibilidade</strong> de concessão do crédito.</li>
+    <li>🟧 <strong>Laranja</strong>: fatores que <strong>reforçaram a decisão</strong> de negar o crédito.</li>
+    <li>🟦 <strong>Azul</strong>: fatores que <strong>apontam possibilidade</strong> de concessão do crédito.</li>
   </ul>
-
   <p>Esta explicação ajuda clientes, gerentes e reguladores a entenderem como a decisão foi tomada, promovendo <strong>transparência</strong> e responsabilidade no uso da inteligência artificial.</p>
-
-  <hr style="margin: 20px 0;">
-
+  <hr/>
   <h3>📌 Informações detalhadas:</h3>
+</div>
 """
 
-# Anexar explicação interativa original com tradução
-exp_html = exp.as_html().replace("Feature", "Característica").replace("Value", "Valor")
-exp_html = exp_html.replace("Prediction probabilities", "Probabilidades de Classificação")
-exp_html = exp_html.replace("Good", "Bom Pagador").replace("Bad", "Mau Pagador")
-html_explicacao += exp_html
-html_explicacao += "</div>"
+# Explicação LIME em HTML traduzido
+lime_html = exp.as_html().replace("Prediction probabilities", "Probabilidades de Classificação")
+lime_html = lime_html.replace("Feature", "Variável").replace("Value", "Valor")
+lime_html = lime_html.replace("Good", "Bom Pagador").replace("Bad", "Mau Pagador")
 
-with open("images/lime_explicacao_amigavel.html", "w", encoding="utf-8") as f:
-    f.write(html_explicacao)
+html_completo = html_intro + lime_html
 
-print("✅ Explicações salvas em 'images/lime_explicacao_amigavel.png' e 'images/lime_explicacao_amigavel.html'")
+with open("images/lime_explanation_ptbr.html", "w", encoding="utf-8") as f:
+    f.write(html_completo)
+
+print("✅ Gráfico e HTML salvos em: pasta 'images/'")
