@@ -1,115 +1,110 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-
-from sklearn.ensemble import RandomForestClassifier
+import seaborn as sns
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report
+from lime.lime_tabular import LimeTabularExplainer
+import os
 
-import lime
-import lime.lime_tabular
+# === Carregar os dados ===
+df = pd.read_csv("data/german.data", delim_whitespace=True, header=None)
 
-# === 1. Carregar e nomear colunas ===
-colunas = [
-    'status_checking_account', 'duration', 'credit_history', 'purpose', 'credit_amount',
-    'savings_account', 'employment_since', 'installment_rate', 'personal_status_sex',
-    'other_debtors', 'residence_since', 'property', 'age', 'other_installment_plans',
-    'housing', 'number_existing_credits', 'job', 'people_liable', 'telephone', 'foreign_worker',
-    'target'
+# === Atribuir nomes às colunas ===
+df.columns = [
+    "status_checking_account", "duration", "credit_history", "purpose", "credit_amount",
+    "savings_account", "employment_since", "installment_rate", "personal_status_sex",
+    "other_debtors", "present_residence", "property", "age", "other_installment_plans",
+    "housing", "number_credits", "job", "people_liable", "foreign_worker", "target"
 ]
 
-df = pd.read_csv('data/german.data', sep=' ', header=None)
-df.columns = colunas
+# === Ajustar o target para 0 (bom pagador) e 1 (mau pagador) ===
+df["target"] = df["target"].map({1: 1, 2: 0})
 
-# === 2. Pré-processar atributos categóricos com LabelEncoder ===
-label_encoders = {}
-for col in df.columns:
-    if df[col].dtype == 'object':
-        le = LabelEncoder()
-        df[col] = le.fit_transform(df[col])
-        label_encoders[col] = le
+# === Pré-processamento ===
+categorical_cols = df.select_dtypes(include=["object"]).columns
 
-# === 3. Separar atributos e alvo ===
-X = df.drop('target', axis=1)
-y = df['target']
+# One-hot encoding para variáveis categóricas
+df_encoded = pd.get_dummies(df, columns=categorical_cols, drop_first=True)
 
-# === 4. Dividir em treino e teste ===
+# Separar features e target
+X = df_encoded.drop("target", axis=1)
+y = df_encoded["target"]
+
+# Separar treino e teste
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# === 5. Treinar modelo Random Forest ===
-model = RandomForestClassifier(n_estimators=100, random_state=42)
+# Treinar modelo Random Forest
+model = RandomForestClassifier(random_state=42)
 model.fit(X_train, y_train)
 
-# === 6. Avaliar desempenho ===
-y_pred = model.predict(X_test)
+# Avaliação
 print("Relatório de Classificação:\n")
+y_pred = model.predict(X_test)
 print(classification_report(y_test, y_pred))
 
-# === 7. Criar explicação com LIME ===
-explainer = lime.lime_tabular.LimeTabularExplainer(
+# === Aplicar LIME ===
+explainer = LimeTabularExplainer(
     training_data=np.array(X_train),
-    feature_names=X.columns.tolist(),
-    class_names=['Bom Pagador', 'Mau Pagador'],
-    mode='classification'
+    feature_names=X_train.columns,
+    class_names=["Bom Pagador", "Mau Pagador"],
+    mode="classification"
 )
 
-# Explicar a primeira instância de teste
-i = 0
-instance = X_test.iloc[i]
-exp = explainer.explain_instance(instance.to_numpy(), model.predict_proba, num_features=10)
+# Explicar uma instância específica
+idx = 0  # pode variar
+exp = explainer.explain_instance(X_test.iloc[idx], model.predict_proba, num_features=10)
 
-# Mostrar explicação no terminal
-print(f"\nExplicação da instância {i}:\n")
-print(exp.as_list())
+# === Melhorar visualização com gráfico .png ===
+fig, ax = plt.subplots(figsize=(10, 6))
 
-# === 8. Gerar gráfico explicativo em português ===
-features, values = zip(*exp.as_list())
-colors = ['green' if val > 0 else 'red' for val in values]
+exp_list = exp.as_list()
+features = [x[0] for x in exp_list]
+weights = [x[1] for x in exp_list]
+colors = ['green' if val > 0 else 'red' for val in weights]
 
-plt.figure(figsize=(10, 6))
-bars = plt.barh(features, values, color=colors)
-plt.axvline(0, color='black', linewidth=0.8)
-plt.title("Explicação Local para a Classe: Mau Pagador", fontsize=14)
-plt.xlabel("Impacto na decisão do modelo", fontsize=11)
+# Plot
+bars = ax.barh(features, weights, color=colors)
+ax.set_title("Explicação Local para a Classe: Mau Pagador", fontsize=14)
+ax.set_xlabel("Impacto na Predição", fontsize=12)
 
-for bar in bars:
-    plt.text(
-        bar.get_width() + 0.005 if bar.get_width() > 0 else bar.get_width() - 0.06,
-        bar.get_y() + bar.get_height() / 2,
-        f'{bar.get_width():.2f}',
-        va='center',
-        color='black',
-        fontsize=9,
-        fontweight='bold'
-    )
+# Adicionar valores nas barras
+for bar, val in zip(bars, weights):
+    ax.text(bar.get_width() + 0.005 * np.sign(bar.get_width()),
+            bar.get_y() + bar.get_height() / 2,
+            f"{val:.2f}",
+            va='center', fontsize=9, fontweight='bold')
 
-plt.figtext(0.99, 0.01,
-    "🟩 Verde: Características que reforçam a decisão de recusar o crédito.\n"
-    "🟥 Vermelho: Características que poderiam justificar aprovação.",
-    horizontalalignment='right',
-    fontsize=9,
-    bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round,pad=0.4'))
+# Legenda explicativa
+legend_text = (
+    "\nVerde: Características que reforçam a decisão de recusar o crédito.\n"
+    "Vermelho: Características que poderiam justificar aprovação."
+)
+props = dict(boxstyle='round', facecolor='white', edgecolor='gray')
+plt.text(1.05, 0.05, legend_text, transform=ax.transAxes,
+         fontsize=9, bbox=props, verticalalignment='bottom')
 
 plt.tight_layout()
-plt.savefig('images/lime_explanation_friendly.png')
+os.makedirs("images", exist_ok=True)
+plt.savefig("images/lime_explanation_friendly.png")
 plt.close()
 
-# === 9. Gerar HTML interativo com explicação para leigos ===
-explicacao_html_extra = """
-<div style="font-family: sans-serif; padding: 10px; border: 1px solid #ccc; background: #f9f9f9; margin-bottom: 10px;">
+# === HTML explicativo em PT-BR ===
+html_explication = """
+<div style="font-family: sans-serif; padding: 10px; background: #f9f9f9;">
   <h2>O que este gráfico mostra?</h2>
-  <p>Este gráfico interativo explica por que o modelo classificou este cliente como <strong>"Mau Pagador"</strong>.</p>
+  <p>Este gráfico interativo explica por que o modelo classificou este cliente como <strong>\"Mau Pagador\"</strong>.</p>
   <ul>
-    <li><span style="color: green; font-weight: bold;">Verde</span>: características que influenciaram <strong>negativamente</strong> (reforçaram a decisão de <strong>negar</strong> o crédito).</li>
-    <li><span style="color: red; font-weight: bold;">Vermelho</span>: características que influenciaram <strong>positivamente</strong> (indicaram que o cliente <strong>poderia receber</strong> o crédito).</li>
+    <li><span style="color: green; font-weight: bold;">🟩 Verde</span>: características que influenciaram <strong>negativamente</strong> (reforçaram a decisão de <strong>negar</strong> o crédito).</li>
+    <li><span style="color: red; font-weight: bold;">🟥 Vermelho</span>: características que influenciaram <strong>positivamente</strong> (indicaram que o cliente <strong>poderia receber</strong> o crédito).</li>
   </ul>
   <p>Esta explicação ajuda clientes, analistas e reguladores a entenderem como a decisão foi tomada, promovendo <strong>transparência</strong> no uso da inteligência artificial.</p>
 </div>
 """
 
 with open("images/lime_explanation_friendly.html", "w", encoding="utf-8") as f:
-    f.write(explicacao_html_extra)
+    f.write(html_explication)
     f.write(exp.as_html())
 
-print("\nExplicações salvas na pasta 'images/' com sucesso!")
+print("Explicação salva como imagem e HTML na pasta 'images/'.")
