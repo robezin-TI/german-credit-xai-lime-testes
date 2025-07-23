@@ -9,7 +9,7 @@ from lime.lime_tabular import LimeTabularExplainer
 import os
 
 # === Carregar os dados ===
-df = pd.read_csv("data/german.data", sep='\s+', header=None)
+df = pd.read_csv("data/german.data", sep=r'\s+', header=None)
 
 # === Atribuir nomes às colunas ===
 df.columns = [
@@ -24,7 +24,11 @@ df.columns = [
 df = df.drop("unused_col", axis=1)
 
 # === Ajustar o target para 0 (bom pagador) e 1 (mau pagador) ===
-df["target"] = df["target"].map({1: 1, 2: 0})
+df["target"] = df["target"].astype(str).str.strip().map({"1": 1, "2": 0})
+
+# === Verificar se houve falhas no mapeamento ===
+if df["target"].isnull().any():
+    raise ValueError("A coluna 'target' contém valores inválidos que não puderam ser mapeados para 0 ou 1. Verifique o conteúdo do arquivo 'german.data'.")
 
 # === Pré-processamento ===
 categorical_cols = df.select_dtypes(include=["object"]).columns
@@ -70,7 +74,7 @@ colors = ['green' if val > 0 else 'red' for val in weights]
 
 # Plot
 bars = ax.barh(features, weights, color=colors)
-ax.set_title("Explicação Local para a Classe: Mau Pagador", fontsize=14)
+ax.set_title("Explicação Local para a Classe: Mau Pagador", fontsize=14, pad=15)
 ax.set_xlabel("Impacto na Predição", fontsize=12)
 
 # Adicionar valores nas barras
@@ -82,12 +86,12 @@ for bar, val in zip(bars, weights):
 
 # Legenda explicativa
 legend_text = (
-    "\n🟩 Verde: Características que reforçam a decisão de recusar o crédito.\n"
+    "🟩 Verde: Características que reforçam a decisão de recusar o crédito.\n"
     "🟥 Vermelho: Características que poderiam justificar aprovação."
 )
 props = dict(boxstyle='round', facecolor='white', edgecolor='gray')
-plt.text(1.02, -0.1, legend_text, transform=ax.transAxes,
-         fontsize=9, bbox=props, verticalalignment='bottom')
+plt.text(0.99, -0.15, legend_text, transform=ax.transAxes,
+         fontsize=9, bbox=props, verticalalignment='bottom', horizontalalignment='right')
 
 plt.tight_layout()
 os.makedirs("images", exist_ok=True)
@@ -111,4 +115,4 @@ with open("images/lime_explanation_friendly.html", "w", encoding="utf-8") as f:
     f.write(html_explication)
     f.write(exp.as_html())
 
-print("Explicação salva como imagem e HTML na pasta 'images/'.")
+print("Explicações salvas na pasta 'images/' com sucesso.")
