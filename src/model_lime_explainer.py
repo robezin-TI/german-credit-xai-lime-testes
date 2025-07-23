@@ -63,12 +63,12 @@ fig = exp.as_pyplot_figure(label=1)
 fig.set_size_inches(12, 6)  # largura aumentada
 
 plt.title("Explicação Local: Por que o modelo classificou como 'Mau Pagador'", fontsize=14)
-plt.xlabel("Contribuição para a decisão", fontsize=12)
+plt.xlabel("ão para a decisão", fontsize=12)
 
 # Corrigir a legenda
 legenda = (
-    "🟧 Laranja: Características que reforçaram a decisão de negar o crédito.\n"
-    "🟦 Azul: Características que sugerem que o crédito poderia ser concedido."
+    "Vermelho: Características que reforçaram a decisão de negar o crédito.\n"
+    "Verde: Características que sugerem que o crédito poderia ser concedido."
 )
 plt.figtext(0.99, 0.01, legenda, fontsize=9, ha='right', va='bottom', bbox=dict(facecolor='white', edgecolor='gray'))
 
