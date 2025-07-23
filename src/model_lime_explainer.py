@@ -9,15 +9,19 @@ from lime.lime_tabular import LimeTabularExplainer
 import os
 
 # === Carregar os dados ===
-df = pd.read_csv("data/german.data", delim_whitespace=True, header=None)
+df = pd.read_csv("data/german.data", sep='\s+', header=None)
 
 # === Atribuir nomes às colunas ===
 df.columns = [
     "status_checking_account", "duration", "credit_history", "purpose", "credit_amount",
     "savings_account", "employment_since", "installment_rate", "personal_status_sex",
     "other_debtors", "present_residence", "property", "age", "other_installment_plans",
-    "housing", "number_credits", "job", "people_liable", "foreign_worker", "target"
+    "housing", "number_credits", "job", "people_liable", "foreign_worker", "target",
+    "unused_col"  # coluna extra que será descartada
 ]
+
+# === Remover coluna extra se não for útil ===
+df = df.drop("unused_col", axis=1)
 
 # === Ajustar o target para 0 (bom pagador) e 1 (mau pagador) ===
 df["target"] = df["target"].map({1: 1, 2: 0})
@@ -78,11 +82,11 @@ for bar, val in zip(bars, weights):
 
 # Legenda explicativa
 legend_text = (
-    "\nVerde: Características que reforçam a decisão de recusar o crédito.\n"
-    "Vermelho: Características que poderiam justificar aprovação."
+    "\n🟩 Verde: Características que reforçam a decisão de recusar o crédito.\n"
+    "🟥 Vermelho: Características que poderiam justificar aprovação."
 )
 props = dict(boxstyle='round', facecolor='white', edgecolor='gray')
-plt.text(1.05, 0.05, legend_text, transform=ax.transAxes,
+plt.text(1.02, -0.1, legend_text, transform=ax.transAxes,
          fontsize=9, bbox=props, verticalalignment='bottom')
 
 plt.tight_layout()
