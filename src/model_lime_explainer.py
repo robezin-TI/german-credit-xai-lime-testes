@@ -1,13 +1,13 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import lime
-import lime.lime_tabular
 import os
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report
+import lime
+import lime.lime_tabular
 
 # === 1. Carregar e preparar os dados ===
 colunas = [
@@ -21,7 +21,7 @@ colunas = [
 df = pd.read_csv('data/german.data', sep=' ', header=None)
 df.columns = colunas
 
-# Codificar variáveis categóricas
+# Codificação de variáveis categóricas
 label_encoders = {}
 for col in df.columns:
     if df[col].dtype == 'object':
@@ -53,12 +53,12 @@ explainer = lime.lime_tabular.LimeTabularExplainer(
     mode='classification'
 )
 
-# Selecionar instância para explicação
-idx = 0
-instance = X_test.iloc[idx]
+# Selecionar uma instância
+i = 0
+instance = X_test.iloc[i]
 exp = explainer.explain_instance(instance.to_numpy(), model.predict_proba, num_features=10)
 
-# === 4. Gráfico PNG (traduzido e largo) ===
+# === 4. Gerar gráfico PNG (com largura estendida e em português) ===
 fig = exp.as_pyplot_figure(label=1)
 fig.set_size_inches(14, 6)
 plt.title("Explicação Local: Por que o modelo classificou como 'Mau Pagador'", fontsize=14)
@@ -75,128 +75,120 @@ os.makedirs("images", exist_ok=True)
 plt.savefig("images/lime_explanation_ptbr.png", bbox_inches='tight')
 plt.close()
 
-# === 5. Frases explicativas automáticas ===
+# === 5. Gerar frases explicativas baseadas nos pesos do LIME ===
 frases = []
 for feature, weight in exp.as_list():
     if weight > 0:
-        frases.append(f"O fator <strong>{feature}</strong> contribuiu para considerar o cliente como <strong>Mau Pagador</strong>.")
+        frases.append(f"🟠 O fator <strong>{feature}</strong> aumentou a chance de classificar o cliente como <strong>mau pagador</strong>.")
     else:
-        frases.append(f"O fator <strong>{feature}</strong> indicou características de <strong>Bom Pagador</strong>.")
+        frases.append(f"🔵 O fator <strong>{feature}</strong> indicou que o cliente pode ser um <strong>bom pagador</strong>.")
 
-# === 6. HTML explicativo com gráfico + simulador + frases ===
-html_intro = """
-<div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f9f9f9;">
-  <h2 style="color: #2e7d32;">📊 Explicação da Decisão do Modelo</h2>
-  <p>O modelo classificou este cliente como <strong>'Mau Pagador'</strong>. Abaixo estão os principais fatores que influenciaram essa decisão.</p>
-  <ul>
-    <li><span style="color: orange;">🟠 Laranja</span>: fatores que sugerem possível aprovação.</li>
-    <li><span style="color: blue;">🔵 Azul</span>: fatores que reforçaram a negativa.</li>
-  </ul>
-  <hr>
-  <h3>🧾 Frases Explicativas:</h3>
-  <ul>
-"""
-
-for frase in frases:
-    html_intro += f"<li>{frase}</li>\n"
-
-html_intro += """
-  </ul>
-  <hr>
-  <h3>📝 Simule sua solicitação de crédito:</h3>
-  <form id="formSimulador">
-    <label>Idade: <input type="number" id="idade" required></label><br><br>
-    <label>Valor do Crédito (R$): <input type="number" id="valor" required></label><br><br>
-    <label>Duração (meses): <input type="number" id="duracao" required></label><br><br>
-    <label>Está empregado? 
-        <input type="radio" name="empregado" value="sim" checked> Sim
-        <input type="radio" name="empregado" value="nao"> Não
-    </label><br><br>
-    <label>Tempo de emprego (em meses): <input type="number" id="tempo_emprego" required></label><br><br>
-    <label>Quantas pessoas moram com você? <input type="number" id="pessoas" required></label><br><br>
-    <label>Renda mensal (R$): <input type="number" id="renda" required></label><br><br>
-    <button type="button" onclick="simular()">Ver Resultado</button>
-  </form>
-
-  <p id="resultadoSimulacao" style="font-weight: bold;"></p>
-  <div id="explicacaoDetalhada" style="margin-top: 20px;"></div>
-
-  <script>
-    function simular() {
-      const idade = parseInt(document.getElementById("idade").value);
-      const valor = parseInt(document.getElementById("valor").value);
-      const duracao = parseInt(document.getElementById("duracao").value);
-      const empregado = document.querySelector('input[name="empregado"]:checked').value;
-      const tempo_emprego = parseInt(document.getElementById("tempo_emprego").value);
-      const pessoas = parseInt(document.getElementById("pessoas").value);
-      const renda = parseInt(document.getElementById("renda").value);
-
-      let aprovado = true;
-      let explicacao = "<h4>📌 Fatores que influenciaram:</h4><ul>";
-
-      if (idade < 21) {
-        aprovado = false;
-        explicacao += "<li>Idade muito baixa pode indicar risco.</li>";
-      } else {
-        explicacao += "<li>Idade considerada adequada.</li>";
-      }
-
-      if (duracao < 3) {
-        aprovado = false;
-        explicacao += "<li>Duração de pagamento muito curta pode indicar inadimplência.</li>";
-      } else {
-        explicacao += "<li>Duração dentro do aceitável.</li>";
-      }
-
-      if (empregado === "nao") {
-        aprovado = false;
-        explicacao += "<li>Não estar empregado é um fator negativo.</li>";
-      } else {
-        explicacao += "<li>Estar empregado é um fator positivo.</li>";
-      }
-
-      if (tempo_emprego < 6) {
-        aprovado = false;
-        explicacao += "<li>Tempo de emprego inferior a 6 meses indica instabilidade.</li>";
-      } else {
-        explicacao += "<li>Tempo de emprego estável.</li>";
-      }
-
-      if (pessoas > 3) {
-        aprovado = false;
-        explicacao += "<li>Muitas pessoas na residência podem indicar sobrecarga financeira.</li>";
-      } else {
-        explicacao += "<li>Quantidade de pessoas aceitável.</li>";
-      }
-
-      const valor_parcela = valor / duracao;
-      if (renda < valor_parcela * 1.5) {
-        aprovado = false;
-        explicacao += "<li>Renda insuficiente para o valor da parcela.</li>";
-      } else {
-        explicacao += "<li>Renda compatível com as parcelas.</li>";
-      }
-
-      explicacao += "</ul>";
-
-      document.getElementById("resultadoSimulacao").innerText = aprovado
-        ? "✅ Provavelmente o crédito seria APROVADO."
-        : "❌ Provavelmente o crédito seria NEGADO.";
-
-      document.getElementById("explicacaoDetalhada").innerHTML = explicacao;
-    }
-  </script>
-
-  <hr>
-  <h3>📈 Gráfico Interativo:</h3>
-</div>
-"""
-
-# Salvar HTML final
+# === 6. Criar HTML com todos os blocos ===
 html_path = "images/lime_explanation_ptbr.html"
 with open(html_path, "w", encoding="utf-8") as f:
-    f.write(html_intro)
-    f.write(exp.as_html())
+    # 1. Explicação da decisão
+    f.write("""
+    <html><head><meta charset="utf-8"></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 30px;">
+    <h2>📌 Explicação da decisão do modelo</h2>
+    <p>O modelo classificou este cliente como <strong>Mau Pagador</strong>. Abaixo estão os principais fatores que influenciaram essa decisão.</p>
+    <ul>
+        <li><span style="color: blue;">🔵 Azul</span>: Fatores que <strong>reforçaram a decisão de negar</strong> o crédito.</li>
+        <li><span style="color: orange;">🟠 Laranja</span>: Fatores que <strong>poderiam indicar aprovação</strong> do crédito.</li>
+    </ul>
+    <hr>
+    """)
 
-print("✅ Gráfico PNG salvo em 'images/lime_explanation_ptbr.png'")
-print("✅ HTML completo gerado em 'images/lime_explanation_ptbr.html'")
+    # 2. Gráfico interativo
+    f.write("<h3>📊 Gráfico Interativo:</h3>")
+    f.write(exp.as_html())
+    f.write("<hr>")
+
+    # 3. Frases explicativas
+    f.write("<h3>🧾 Explicações em linguagem simples:</h3><ul>")
+    for frase in frases:
+        f.write(f"<li style='margin-bottom:8px;'>{frase}</li>")
+    f.write("</ul><hr>")
+
+    # 4. Simulador de crédito
+    f.write("""
+    <h3>📝 Simule sua solicitação de crédito:</h3>
+    <form id="formSimulador">
+        <label>Idade: <input type="number" id="idade" required></label><br><br>
+        <label>Valor do Crédito: <input type="number" id="valor" required></label><br><br>
+        <label>Duração (meses): <input type="number" id="duracao" required></label><br><br>
+        <label>Está empregado?
+            <select id="empregado">
+                <option value="sim">Sim</option>
+                <option value="nao">Não</option>
+            </select>
+        </label><br><br>
+        <label>Empregado desde quando (em meses): <input type="number" id="emprego_tempo" required></label><br><br>
+        <label>Quantas pessoas moram com você? <input type="number" id="moradores" required></label><br><br>
+        <label>Renda mensal (R$): <input type="number" id="renda" required></label><br><br>
+        <button type="button" onclick="simular()">Ver Resultado</button>
+    </form>
+    <p id="resultadoSimulacao" style="font-weight: bold; font-size: 16px; color: #333; margin-top: 20px;"></p>
+
+    <script>
+    function simular() {
+        const idade = parseInt(document.getElementById("idade").value);
+        const valor = parseInt(document.getElementById("valor").value);
+        const duracao = parseInt(document.getElementById("duracao").value);
+        const empregado = document.getElementById("empregado").value;
+        const emprego_tempo = parseInt(document.getElementById("emprego_tempo").value);
+        const moradores = parseInt(document.getElementById("moradores").value);
+        const renda = parseInt(document.getElementById("renda").value);
+
+        let mensagens = [];
+        let aprovado = true;
+
+        if (idade < 21) {
+            mensagens.push("❌ Idade abaixo de 21 anos pode dificultar a aprovação.");
+            aprovado = false;
+        } else {
+            mensagens.push("✅ Idade adequada.");
+        }
+
+        if (empregado === "nao") {
+            mensagens.push("❌ Estar desempregado reduz a chance de aprovação.");
+            aprovado = false;
+        } else {
+            mensagens.push("✅ Está empregado.");
+            if (emprego_tempo < 6) {
+                mensagens.push("❌ Menos de 6 meses de trabalho atual pode ser um fator negativo.");
+                aprovado = false;
+            } else {
+                mensagens.push("✅ Tempo de emprego satisfatório.");
+            }
+        }
+
+        if (moradores > 3) {
+            mensagens.push("❌ Muitas pessoas no domicílio podem indicar maior comprometimento de renda.");
+            aprovado = false;
+        } else {
+            mensagens.push("✅ Número de moradores adequado.");
+        }
+
+        let parcela = valor / duracao;
+        if (parcela > renda * 0.5) {
+            mensagens.push("❌ Renda mensal insuficiente para a parcela estimada (~R$" + parcela.toFixed(2) + ").");
+            aprovado = false;
+        } else {
+            mensagens.push("✅ Renda condizente com o valor e prazo do crédito.");
+        }
+
+        const resultado = aprovado ?
+          "✅ Provavelmente o crédito seria APROVADO." :
+          "❌ Provavelmente o crédito seria NEGADO.";
+
+        document.getElementById("resultadoSimulacao").innerHTML =
+          "<p style='font-size:18px;'>" + resultado + "</p><ul><li>" + mensagens.join("</li><li>") + "</li></ul>";
+    }
+    </script>
+    """)
+
+    f.write("</body></html>")
+
+# Mensagens de conclusão
+print("✅ Gráfico PNG salvo em: images/lime_explanation_ptbr.png")
+print("✅ HTML completo gerado em: images/lime_explanation_ptbr.html")
