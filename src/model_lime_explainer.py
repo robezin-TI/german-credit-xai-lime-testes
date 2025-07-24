@@ -60,15 +60,14 @@ exp = explainer.explain_instance(instance.to_numpy(), model.predict_proba, num_f
 
 # === 4. Gerar gráfico PNG (com largura estendida e em português) ===
 fig = exp.as_pyplot_figure(label=1)
-fig.set_size_inches(12, 6)  # largura aumentada
+fig.set_size_inches(14, 6)
 
 plt.title("Explicação Local: Por que o modelo classificou como 'Mau Pagador'", fontsize=14)
-plt.xlabel("ão para a decisão", fontsize=12)
+plt.xlabel("Contribuição para a decisão", fontsize=12)
 
-# Corrigir a legenda
 legenda = (
-    "Vermelho: Características que reforçaram a decisão de negar o crédito.\n"
-    "Verde: Características que sugerem que o crédito poderia ser concedido."
+    "🔵 Azul: Características que reforçaram a decisão de negar o crédito.\n"
+    "🟠 Laranja: Características que sugerem que o crédito poderia ser concedido."
 )
 plt.figtext(0.99, 0.01, legenda, fontsize=9, ha='right', va='bottom', bbox=dict(facecolor='white', edgecolor='gray'))
 
@@ -77,25 +76,67 @@ os.makedirs("images", exist_ok=True)
 plt.savefig("images/lime_explanation_ptbr.png", bbox_inches='tight')
 plt.close()
 
-# === 5. Gerar HTML explicativo em PT-BR com gráfico embutido ===
+# === 5. Geração de frases explicativas automáticas ===
+frases = []
+for feature, weight in exp.as_list():
+    if weight > 0:
+        frases.append(f"O fator '{feature}' aumentou a chance de classificar o cliente como mau pagador.")
+    else:
+        frases.append(f"O fator '{feature}' ajudou a indicar que o cliente poderia ser um bom pagador.")
+
+# === 6. Criar HTML explicativo com gráfico interativo e simulador ===
 html_intro = """
-<div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f9f9f9;">
-  <h2 style="color: #111;"><img src="https://img.icons8.com/color/48/ai.png" style="vertical-align: middle;"> O que este gráfico mostra?</h2>
-  <p style="font-size: 16px;">Este gráfico explica de forma visual por que o modelo de IA classificou este cliente como <strong>Mau Pagador</strong>.</p>
-  <ul style="font-size: 15px;">
-    <li><span style="color: orange; font-weight: bold;">🟧 Laranja</span>: fatores que <strong>reforçaram a decisão</strong> de negar o crédito.</li>
-    <li><span style="color: blue; font-weight: bold;">🟦 Azul</span>: fatores que <strong>apontam possibilidade</strong> de concessão do crédito.</li>
+<div style="font-family: Arial, sans-serif; padding: 20px;">
+  <h2>📊 Explicação da Decisão do Modelo</h2>
+  <p>O modelo classificou este cliente como <strong>'Mau Pagador'</strong>. Abaixo estão os principais fatores que influenciaram essa decisão.</p>
+  <ul>
+    <li><span style="color: orange;">🟠 Laranja</span>: fatores que sugerem possível aprovação.</li>
+    <li><span style="color: blue;">🔵 Azul</span>: fatores que reforçaram a negativa.</li>
   </ul>
-  <p style="font-size: 15px;">Esta explicação ajuda clientes, gerentes e reguladores a entenderem como a decisão foi tomada, promovendo <strong>transparência</strong> e responsabilidade no uso da inteligência artificial.</p>
   <hr>
-  <h3 style="color: #c2185b;">📌 Informações detalhadas:</h3>
+  <h3>🧾 Frases Explicativas:</h3>
+  <ul>
+"""
+
+# Adicionar frases ao HTML
+for frase in frases:
+    html_intro += f"<li>{frase}</li>\n"
+
+html_intro += """
+  </ul>
+  <hr>
+  <h3>📝 Simule sua solicitação de crédito:</h3>
+  <form id="formSimulador">
+    <label>Idade: <input type="number" id="idade" required></label><br><br>
+    <label>Valor do Crédito: <input type="number" id="valor" required></label><br><br>
+    <label>Duração (meses): <input type="number" id="duracao" required></label><br><br>
+    <button type="button" onclick="simular()">Ver Resultado</button>
+  </form>
+  <p id="resultadoSimulacao" style="font-weight: bold;"></p>
+
+  <script>
+    function simular() {
+      const idade = parseInt(document.getElementById("idade").value);
+      const valor = parseInt(document.getElementById("valor").value);
+      const duracao = parseInt(document.getElementById("duracao").value);
+      let resultado = "✅ Provavelmente o crédito seria APROVADO.";
+      if (idade < 25 && valor > 5000 || duracao > 36) {
+        resultado = "❌ Provavelmente o crédito seria NEGADO.";
+      }
+      document.getElementById("resultadoSimulacao").innerText = resultado;
+    }
+  </script>
+
+  <hr>
+  <h3>📈 Gráfico Interativo:</h3>
 </div>
 """
 
+# Salvar HTML completo
 html_path = "images/lime_explanation_ptbr.html"
 with open(html_path, "w", encoding="utf-8") as f:
     f.write(html_intro)
-    f.write(exp.as_html())  # adiciona o gráfico interativo
+    f.write(exp.as_html())  # gráfico interativo incluído
 
-print("✅ Gráfico salvo em 'images/lime_explanation_ptbr.png'")
-print("✅ HTML completo salvo em 'images/lime_explanation_ptbr.html'")
+print("✅ Gráfico PNG salvo em: images/lime_explanation_ptbr.png")
+print("✅ HTML gerado com gráfico, frases e simulador: images/lime_explanation_ptbr.html")
