@@ -65,8 +65,8 @@ plt.title("Explicação Local: Por que o modelo classificou como 'Mau Pagador'",
 plt.xlabel("Contribuição para a decisão", fontsize=12)
 
 legenda = (
-    "🔵 Azul: Características que reforçaram a decisão de negar o crédito.\n"
-    "🟠 Laranja: Características que sugerem que o crédito poderia ser concedido."
+    "🟠 Laranja: Características que reforçaram a decisão de negar o crédito.\n"
+    "🔵 Azul: Laranja: Características que sugerem que o crédito poderia ser concedido."
 )
 plt.figtext(0.99, 0.01, legenda, fontsize=9, ha='right', va='bottom', bbox=dict(facecolor='white', edgecolor='gray'))
 
