@@ -1,3 +1,5 @@
+# model_lime_explainer.py
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,9 +20,10 @@ colunas = [
     'alvo'
 ]
 
-df = pd.read_csv('data/german.data', sep=' ', header=None)
+df = pd.read_csv("data/german.data", sep=' ', header=None)
 df.columns = colunas
 
+# Codificação de variáveis categóricas
 label_encoders = {}
 for col in df.columns:
     if df[col].dtype == 'object':
@@ -28,183 +31,87 @@ for col in df.columns:
         df[col] = le.fit_transform(df[col])
         label_encoders[col] = le
 
-# Ajustar labels: 1 = ruim, 2 = bom → 0 = bom, 1 = ruim
-df['alvo'] = df['alvo'].map({2: 0, 1: 1})
+# Ajustar classe alvo: 1 → Bom pagador, 2 → Mau pagador → para 0 e 1
+df['alvo'] = df['alvo'].map({1: 0, 2: 1})  # 0 = bom, 1 = mau
 
+# Separar variáveis
 X = df.drop('alvo', axis=1)
 y = df['alvo']
 
+# Dividir os dados
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# === 2. Treinar modelo ===
-model = RandomForestClassifier(n_estimators=100, random_state=42)
-model.fit(X_train, y_train)
-y_pred = model.predict(X_test)
-print("Relatório de Classificação:\n")
+# === 2. Treinar o modelo ===
+modelo = RandomForestClassifier(n_estimators=100, random_state=42)
+modelo.fit(X_train, y_train)
+
+# Avaliação do modelo
+print("=== Relatório de Classificação ===")
+y_pred = modelo.predict(X_test)
 print(classification_report(y_test, y_pred))
 
-# === 3. Inicializar LIME ===
+# === 3. Aplicar LIME ===
 explainer = lime.lime_tabular.LimeTabularExplainer(
-    training_data=X_train.values,
+    training_data=np.array(X_train),
     feature_names=X.columns.tolist(),
-    class_names=["Bom Pagador", "Mau Pagador"],
+    class_names=['Bom Pagador', 'Mau Pagador'],
     mode='classification'
 )
 
-# === 4. Função para gerar explicações ===
-def gerar_explicacao(instancia, nome_arquivo_png, titulo):
-    pred_proba = model.predict_proba([instancia])[0]
-    predicao = int(np.argmax(pred_proba))
-
-    exp = explainer.explain_instance(instancia, model.predict_proba, num_features=10)
-    fig = exp.as_pyplot_figure(label=predicao)
-    fig.set_size_inches(12, 6)
-    plt.title(titulo)
+# === Função para gerar explicações LIME ===
+def gerar_explicacao(instancia, nome_arquivo, titulo_plot):
+    exp = explainer.explain_instance(instancia.values, modelo.predict_proba, num_features=10)
+    
+    # Geração do gráfico PNG
+    fig = exp.as_pyplot_figure()
+    fig.set_size_inches(14, 6)
+    plt.title(titulo_plot, fontsize=14)
+    plt.xlabel("Contribuição para a decisão", fontsize=12)
     legenda = (
         "🟠 Laranja: Características que reforçaram a decisão de negar o crédito.\n"
         "🔵 Azul: Características que sugerem que o crédito poderia ser concedido."
     )
-    plt.figtext(0.99, 0.01, legenda, fontsize=9, ha='right', va='bottom',
+    plt.figtext(0.99, 0.01, legenda, fontsize=9, ha='right', va='bottom', 
                 bbox=dict(facecolor='white', edgecolor='gray'))
-    plt.tight_layout()
+
     os.makedirs("images", exist_ok=True)
-    img_path = f"images/{nome_arquivo_png}.png"
-    plt.savefig(img_path, bbox_inches='tight')
+    path = f"images/{nome_arquivo}.png"
+    plt.savefig(path, bbox_inches='tight')
     plt.close()
 
+    # Frases explicativas
     frases = []
-    for feature, peso in exp.as_list(label=predicao):
+    for feature, peso in exp.as_list():
         if peso > 0:
-            frases.append(f"🟠 O fator <strong>{feature}</strong> aumentou a chance de classificar como <strong>mau pagador</strong>.")
+            frases.append(f"🟠 O fator **{feature}** aumentou a chance de classificar como **mau pagador**.")
         else:
-            frases.append(f"🔵 O fator <strong>{feature}</strong> contribuiu para considerar como <strong>bom pagador</strong>.")
-    return exp, frases, img_path
+            frases.append(f"🔵 O fator **{feature}** indicou chance maior de ser **bom pagador**.")
+    
+    return exp, frases, path
 
-# === 5. Selecionar um bom e um mau pagador corretamente classificados ===
-def selecionar_instancia_por_classe(classe_desejada):
-    for idx in X_test.index:
-        instancia = X_test.loc[idx].values
-        pred = model.predict([instancia])[0]
-        real = y_test.loc[idx]
-        if pred == classe_desejada and real == classe_desejada:
-            return instancia
-    return None
+# === 4. Selecionar uma instância de cada classe ===
+bom_idx = y_test[y_test == 0].index[0]
+mau_idx = y_test[y_test == 1].index[0]
 
-inst_mau = selecionar_instancia_por_classe(1)
-inst_bom = selecionar_instancia_por_classe(0)
+inst_bom = X_test.loc[bom_idx]
+inst_mau = X_test.loc[mau_idx]
 
-exp_mau, frases_mau, img_mau = gerar_explicacao(inst_mau, "grafico_mau_pagador", "Por que o modelo classificou como 'Mau Pagador'?")
-exp_bom, frases_bom, img_bom = gerar_explicacao(inst_bom, "grafico_bom_pagador", "Por que o modelo classificou como 'Bom Pagador'?")
+# === 5. Gerar explicações para bom e mau pagador ===
+exp_bom, frases_bom, img_bom = gerar_explicacao(inst_bom, "grafico_bom_pagador", 
+                                                "Por que o modelo classificou como 'Bom Pagador'?")
 
-# === 6. Criar HTML ===
-html_path = "images/lime_explanation_ptbr.html"
-with open(html_path, "w", encoding="utf-8") as f:
-    f.write("""
-    <html><head><meta charset="utf-8"></head><body style="font-family: Arial; background-color: #f9f9f9; padding: 30px;">
-    <h2>📌 Explicação da decisão do modelo</h2>
-    <p>O modelo classificou os clientes com base nos seguintes fatores extraídos dos dados.</p>
-    <ul>
-        <li><span style="color: blue;">🔵 Azul</span>: Indicadores de bom pagador.</li>
-        <li><span style="color: orange;">🟠 Laranja</span>: Indicadores de mau pagador.</li>
-    </ul><hr>
-    """)
+exp_mau, frases_mau, img_mau = gerar_explicacao(inst_mau, "grafico_mau_pagador", 
+                                                "Por que o modelo classificou como 'Mau Pagador'?")
 
-    # 1. Mau Pagador
-    f.write("<h3 style='color: red;'>🔴 Exemplo de Mau Pagador</h3>")
-    f.write(f"<img src='{img_mau}' width='100%'><br>")
-    f.write("<ul>")
-    for frase in frases_mau:
-        f.write(f"<li>{frase}</li>")
-    f.write("</ul><hr>")
+# === 6. Mostrar resultados no terminal ===
+print("\n=== Explicações para BOM PAGADOR ===")
+for frase in frases_bom:
+    print(frase)
 
-    # 2. Bom Pagador
-    f.write("<h3 style='color: green;'>🟢 Exemplo de Bom Pagador</h3>")
-    f.write(f"<img src='{img_bom}' width='100%'><br>")
-    f.write("<ul>")
-    for frase in frases_bom:
-        f.write(f"<li>{frase}</li>")
-    f.write("</ul><hr>")
+print("\n=== Explicações para MAU PAGADOR ===")
+for frase in frases_mau:
+    print(frase)
 
-    # 3. Simulador
-    f.write("""
-    <h3>📝 Simule sua solicitação de crédito:</h3>
-    <form id="formSimulador">
-        <label>Idade: <input type="number" id="idade" required></label><br><br>
-        <label>Valor do Crédito: <input type="number" id="valor" required></label><br><br>
-        <label>Duração (meses): <input type="number" id="duracao" required></label><br><br>
-        <label>Está empregado?
-            <select id="empregado">
-                <option value="sim">Sim</option>
-                <option value="nao">Não</option>
-            </select>
-        </label><br><br>
-        <label>Empregado desde quando (em meses): <input type="number" id="emprego_tempo" required></label><br><br>
-        <label>Quantas pessoas moram com você? <input type="number" id="moradores" required></label><br><br>
-        <label>Renda mensal (R$): <input type="number" id="renda" required></label><br><br>
-        <button type="button" onclick="simular()">Ver Resultado</button>
-    </form>
-    <p id="resultadoSimulacao" style="font-weight: bold; font-size: 16px; margin-top: 20px;"></p>
-
-    <script>
-    function simular() {
-        const idade = parseInt(document.getElementById("idade").value);
-        const valor = parseInt(document.getElementById("valor").value);
-        const duracao = parseInt(document.getElementById("duracao").value);
-        const empregado = document.getElementById("empregado").value;
-        const emprego_tempo = parseInt(document.getElementById("emprego_tempo").value);
-        const moradores = parseInt(document.getElementById("moradores").value);
-        const renda = parseInt(document.getElementById("renda").value);
-
-        let mensagens = [];
-        let aprovado = true;
-
-        if (idade < 21) {
-            mensagens.push("❌ Idade abaixo de 21 anos pode dificultar a aprovação.");
-            aprovado = false;
-        } else {
-            mensagens.push("✅ Idade adequada.");
-        }
-
-        if (empregado === "nao") {
-            mensagens.push("❌ Estar desempregado reduz a chance de aprovação.");
-            aprovado = false;
-        } else {
-            mensagens.push("✅ Está empregado.");
-            if (emprego_tempo < 6) {
-                mensagens.push("❌ Menos de 6 meses de trabalho atual pode ser um fator negativo.");
-                aprovado = false;
-            } else {
-                mensagens.push("✅ Tempo de emprego satisfatório.");
-            }
-        }
-
-        if (moradores > 3) {
-            mensagens.push("❌ Muitas pessoas no domicílio podem indicar maior comprometimento de renda.");
-            aprovado = false;
-        } else {
-            mensagens.push("✅ Número de moradores adequado.");
-        }
-
-        let parcela = valor / duracao;
-        if (parcela > renda * 0.5) {
-            mensagens.push("❌ Renda mensal insuficiente para a parcela estimada (~R$" + parcela.toFixed(2) + ").");
-            aprovado = false;
-        } else {
-            mensagens.push("✅ Renda condizente com o valor e prazo do crédito.");
-        }
-
-        const resultado = aprovado ?
-          "✅ Provavelmente o crédito seria APROVADO." :
-          "❌ Provavelmente o crédito seria NEGADO.";
-
-        document.getElementById("resultadoSimulacao").innerHTML =
-          "<p style='font-size:18px;'>" + resultado + "</p><ul><li>" + mensagens.join("</li><li>") + "</li></ul>";
-    }
-    </script>
-    """)
-
-    f.write("</body></html>")
-
-# === Conclusão
-print("✅ PNGs salvos em: images/grafico_bom_pagador.png e grafico_mau_pagador.png")
-print("✅ HTML completo salvo em: images/lime_explanation_ptbr.html")
+print("\n✅ Gráficos PNG salvos em:")
+print(f"   → {img_bom}")
+print(f"   → {img_mau}")
