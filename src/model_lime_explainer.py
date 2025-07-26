@@ -1,117 +1,127 @@
-import os
 import pandas as pd
 import numpy as np
+import os
 import matplotlib.pyplot as plt
+from lime.lime_tabular import LimeTabularExplainer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report
-import lime
-import lime.lime_tabular
 
-# === 1. Carregar os dados ===
+# Caminho do dataset
+caminho_dataset = os.path.join(os.path.dirname(__file__), '../data/german.data')
+
+# Nomes das colunas com tradução
 colunas = [
-    'status_conta', 'duração', 'histórico_crédito', 'propósito', 'valor_crédito',
-    'conta_poupança', 'emprego_desde', 'taxa_parcelamento', 'sexo_estado_civil',
-    'outros_devedores', 'tempo_residência', 'propriedade', 'idade', 'outras_parcelas',
-    'moradia', 'número_empréstimos', 'profissão', 'responsáveis', 'telefone',
-    'trabalhador_estrangeiro', 'alvo'
+    "status_conta", "duração", "histórico_crédito", "propósito", "valor_crédito",
+    "conta_poupança", "emprego_desde", "taxa_parcelamento", "sexo_estado_civil", "garantia",
+    "residência_anos", "propriedade", "idade", "outros_planos", "habitação",
+    "número_créditos", "trabalho", "trabalhador_estrangeiro", "telefone", "classe"
 ]
 
-caminhos_possiveis = ["data/german.data", "../data/german.data"]
-for caminho in caminhos_possiveis:
-    if os.path.exists(caminho):
-        df = pd.read_csv(caminho, sep=' ', header=None, names=colunas)
-        break
-else:
-    raise FileNotFoundError("Arquivo 'german.data' não encontrado.")
+# Carregamento do dataset
+df = pd.read_csv(caminho_dataset, sep=' ', header=None, names=colunas)
 
-# Codificar variáveis categóricas
-label_encoders = {}
-for coluna in df.columns:
-    if df[coluna].dtype == 'object':
-        le = LabelEncoder()
-        df[coluna] = le.fit_transform(df[coluna])
-        label_encoders[coluna] = le
+# Separação entre atributos e rótulos
+X = df.drop("classe", axis=1)
+y = df["classe"]
 
-# Separar atributos e alvo
-X = df.drop("alvo", axis=1)
-y = df["alvo"]
-
-# Dividir dados para treino e teste
+# Divisão em treino/teste
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# === 2. Treinar modelo ===
+# Treinamento do modelo
 modelo = RandomForestClassifier(n_estimators=100, random_state=42)
 modelo.fit(X_train, y_train)
-print("\nRelatório de Classificação:\n")
-print(classification_report(y_test, modelo.predict(X_test)))
 
-# === 3. Criar explicador LIME ===
-explainer = lime.lime_tabular.LimeTabularExplainer(
-    training_data=np.array(X_train),
-    feature_names=X.columns.tolist(),
-    class_names=["Bom Pagador", "Mal Pagador"],
+# Avaliação
+print("Relatório de Classificação:\n")
+y_pred = modelo.predict(X_test)
+print(classification_report(y_test, y_pred))
+
+# Preparação para o LIME
+explainer = LimeTabularExplainer(
+    X_train.values,
+    feature_names=X.columns,
+    class_names=['Bom Pagador', 'Mal Pagador'],
+    discretize_continuous=True,
     mode="classification"
 )
 
-# === 4. Função para gerar explicações ===
+# Seleção de exemplos
+X_test_np = X_test.to_numpy()
+y_pred = modelo.predict(X_test)
+
+idx_bom = np.where(y_pred == 1)[0][0]
+idx_mal = np.where(y_pred == 2)[0][0]
+inst_bom = X_test_np[idx_bom]
+inst_mal = X_test_np[idx_mal]
+
+# Função para gerar explicações LIME + PNG
 def gerar_explicacao(instancia, nome_arquivo, titulo):
-    predicao = modelo.predict([instancia])[0]
+    exp = explainer.explain_instance(instancia, modelo.predict_proba, num_features=10)
+    fig = exp.as_pyplot_figure(label=exp.available_labels()[0])
+    
+    # Customizações
+    plt.title(titulo)
+    plt.xlabel("Contribuição para a decisão")
+    handles, labels = plt.gca().get_legend_handles_labels()
+    if handles:
+        plt.legend(
+            handles=handles,
+            labels=["🟠 Laranja: Características que aumentam a chance de ser classificado como 'Mal Pagador'.",
+                    "🔵 Azul: Características que aumentam a chance de ser classificado como 'Bom Pagador'."],
+            loc='lower center', bbox_to_anchor=(0.5, -0.25), fontsize=8
+        )
 
-    exp = explainer.explain_instance(
-        data_row=instancia,
-        predict_fn=modelo.predict_proba,
-        num_features=10
-    )
-
-    fig = exp.as_pyplot_figure(label=predicao)
-    fig.set_size_inches(14, 6)
-    plt.title(titulo, fontsize=14)
-    plt.xlabel("Contribuição para a decisão", fontsize=12)
-
-    legenda = (
-        "🟠 Laranja: Características que aumentam a chance de ser classificado como 'Mal Pagador'.\n"
-        "🔵 Azul: Características que aumentam a chance de ser classificado como 'Bom Pagador'."
-    )
-    plt.figtext(0.99, 0.01, legenda, fontsize=9, ha='right', va='bottom',
-                bbox=dict(facecolor='white', edgecolor='gray'))
-
-    os.makedirs("images", exist_ok=True)
-    img_path = f"images/{nome_arquivo}.png"
-    plt.savefig(img_path, bbox_inches='tight')
+    caminho_img = os.path.join(os.path.dirname(__file__), f"../img/{nome_arquivo}.png")
+    plt.savefig(caminho_img, bbox_inches="tight")
     plt.close()
 
-    frases = []
-    for feature, peso in exp.as_list(label=predicao):
-        if peso > 0:
-            frases.append(f"🟠 A característica <strong>{feature}</strong> contribuiu para classificar como <strong>Mal Pagador</strong>.")
-        else:
-            frases.append(f"🔵 A característica <strong>{feature}</strong> contribuiu para classificar como <strong>Bom Pagador</strong>.")
+    explicacoes = []
+    for feature, peso in exp.as_list(label=exp.available_labels()[0]):
+        cor = "🟠" if peso > 0 else "🔵"
+        direcao = "Mal Pagador" if peso > 0 else "Bom Pagador"
+        explicacoes.append(f"{cor} A característica {feature} contribuiu para classificar como {direcao}.")
 
-    return exp, frases, img_path, predicao
+    return explicacoes
 
-# === 5. Selecionar exemplos claros ===
-idx_bom = next((i for i in y_test.index if y_test[i] == 1), None)
-idx_mal = next((i for i in y_test.index if y_test[i] == 2), None)
+# Geração dos gráficos e frases explicativas
+frases_bom = gerar_explicacao(inst_bom, "grafico_bom_pagador", "Por que o modelo classificou como 'Bom Pagador'?")
+frases_mal = gerar_explicacao(inst_mal, "grafico_mal_pagador", "Por que o modelo classificou como 'Mal Pagador'?")
 
-if idx_bom is None or idx_mal is None:
-    raise ValueError("Não foi possível encontrar exemplos de bom e mal pagador nos dados de teste.")
-
-inst_bom = X_test.loc[idx_bom]
-inst_mal = X_test.loc[idx_mal]
-
-# === 6. Gerar explicações ===
-exp_bom, frases_bom, img_bom, classe_bom = gerar_explicacao(inst_bom, "grafico_bom_pagador", "Por que o modelo classificou como 'Bom Pagador'?")
-exp_mal, frases_mal, img_mal, classe_mal = gerar_explicacao(inst_mal, "grafico_mal_pagador", "Por que o modelo classificou como 'Mal Pagador'?")
-
-# === 7. Exibir frases ===
+# Impressão das explicações
 print("\n✅ Explicações para Bom Pagador:")
 for frase in frases_bom:
-    print("-", frase.replace("<strong>", "").replace("</strong>", ""))
+    print("-", frase)
 
 print("\n✅ Explicações para Mal Pagador:")
 for frase in frases_mal:
-    print("-", frase.replace("<strong>", "").replace("</strong>", ""))
+    print("-", frase)
 
-print(f"\n✅ Gráficos salvos em:\n  • {img_bom}\n  • {img_mal}")
+# Explicação final geral
+print("\n📘 Definições gerais utilizadas pelo modelo:")
+
+print("""
+✅ Bom Pagador
+Um cliente é classificado como Bom Pagador quando possui um perfil que sugere baixo risco de inadimplência. Entre os principais fatores que influenciam positivamente estão:
+
+- Ter uma conta bancária ativa com bom histórico de movimentação.
+- Apresentar um bom histórico de crédito (pagamentos anteriores em dia).
+- Ter uma idade mais avançada, geralmente acima dos 30 anos, o que indica maior estabilidade.
+- Solicitar valores de crédito mais baixos ou proporcionais à renda.
+- Estar empregado há mais tempo, demonstrando estabilidade profissional.
+- Ter objetivos de crédito claros e seguros, como aquisição de bens essenciais.
+- Possuir bens no nome (como carro ou imóvel).
+- Ter telefone ativo, o que sugere maior rastreabilidade e transparência.
+
+❌ Mal Pagador
+Um cliente é classificado como Mal Pagador quando o modelo identifica um conjunto de características associadas a maior risco de inadimplência. Entre os fatores mais comuns estão:
+
+- Ausência de conta bancária ativa ou movimentações suspeitas.
+- Histórico de crédito ruim ou inexistente.
+- Idade muito baixa, indicando pouca experiência financeira.
+- Solicitação de valores elevados de crédito, desproporcionais à estabilidade demonstrada.
+- Pouco tempo no emprego atual.
+- Falta de reserva financeira (como conta poupança ou investimentos).
+- Motivações de crédito mais arriscadas, como empréstimos para consumo não essencial.
+- Ausência de patrimônio registrado ou garantias.
+""")
