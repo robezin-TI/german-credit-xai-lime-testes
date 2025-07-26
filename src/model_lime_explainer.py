@@ -1,103 +1,111 @@
+import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report
-from lime.lime_tabular import LimeTabularExplainer
+import lime
+import lime.lime_tabular
 
-# Definir nomes das colunas
+# === Etapa 1: Leitura dos dados com fallback ===
 colunas = [
-    'status_conta', 'duracao', 'historico_crédito', 'propósito', 'valor_crédito',
-    'conta_poupança', 'emprego_desde', 'taxa_parcelamento', 'sexo_estado_civil',
-    'garantidor', 'duracao_residencia', 'idade', 'outras_contas', 'moradia',
-    'número_créditos', 'trabalhador_autônomo', 'trabalhador_estrangeiro',
-    'emprego_telefone', 'propriedade', 'profissão', 'classe'
+    'status_conta', 'duracao', 'historico_credito', 'proposito', 'valor_credito',
+    'conta_poupanca', 'emprego_desde', 'taxa_parcelamento', 'sexo_estado_civil',
+    'outros_devedores', 'tempo_residencia', 'propriedade', 'idade', 'outras_parcelas',
+    'moradia', 'numero_empregos', 'profissao', 'responsaveis', 'telefone',
+    'trabalhador_estrangeiro', 'alvo'
 ]
 
-# Carregar o dataset (caminho relativo correto)
-df = pd.read_csv("../data/german.data", sep=' ', header=None, names=colunas)
+caminhos_possiveis = ["data/german.data", "../data/german.data"]
+df = None
+for caminho in caminhos_possiveis:
+    if os.path.exists(caminho):
+        df = pd.read_csv(caminho, sep=' ', header=None, names=colunas)
+        print(f"✅ Arquivo carregado de: {caminho}")
+        break
 
-# Ajustar a variável alvo
-df['classe'] = df['classe'].map({1: 1, 2: 0})
+if df is None:
+    raise FileNotFoundError("❌ Arquivo german.data não encontrado nos caminhos esperados.")
 
-# Separar variáveis independentes e alvo
-X = df.drop('classe', axis=1)
-y = df['classe']
+# === Etapa 2: Pré-processamento ===
+label_encoders = {}
+for col in df.select_dtypes(include='object').columns:
+    le = LabelEncoder()
+    df[col] = le.fit_transform(df[col])
+    label_encoders[col] = le
 
-# One-hot encoding
-X_encoded = pd.get_dummies(X, drop_first=True)
+X = df.drop("alvo", axis=1)
+y = df["alvo"].map({1: 1, 2: 0})  # 1 = Bom Pagador, 0 = Mal Pagador
 
-# Dividir em treino e teste
-X_train, X_test, y_train, y_test = train_test_split(X_encoded, y, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Treinar modelo
+# === Etapa 3: Treinamento do modelo ===
 modelo = RandomForestClassifier(n_estimators=100, random_state=42)
 modelo.fit(X_train, y_train)
 
-# Avaliação
+# === Etapa 4: Avaliação ===
 y_pred = modelo.predict(X_test)
-print("\nRelatório de Classificação:\n")
-print(classification_report(y_test, y_pred))
+print("\n🎯 Relatório de Classificação:\n")
+print(classification_report(y_test, y_pred, target_names=["Mal Pagador", "Bom Pagador"]))
 
-# Instanciador do LIME
-explainer = LimeTabularExplainer(
+# === Etapa 5: Instâncias para explicação ===
+bom_idx = y_test[y_test == 1].index[0]
+mal_idx = y_test[y_test == 0].index[0]
+
+inst_bom = X_test.loc[bom_idx]
+inst_mal = X_test.loc[mal_idx]
+
+# === Etapa 6: Inicializar LIME ===
+explainer = lime.lime_tabular.LimeTabularExplainer(
     training_data=X_train.values,
-    feature_names=X_train.columns.tolist(),
+    feature_names=X.columns.tolist(),
     class_names=["Mal Pagador", "Bom Pagador"],
-    mode='classification',
-    verbose=True,
-    discretize_continuous=True
+    mode="classification"
 )
 
-# Função auxiliar para gerar explicações
-def gerar_explicacao(instancia, nome_arquivo, titulo_grafico):
-    exp = explainer.explain_instance(instancia, modelo.predict_proba, num_features=10)
-    predicao = int(modelo.predict([instancia])[0])
+# === Etapa 7: Função para gerar explicação ===
+def gerar_explicacao(instancia, nome_arquivo, titulo):
+    exp = explainer.explain_instance(instancia.values, modelo.predict_proba, num_features=10)
+    predicao = int(modelo.predict([instancia.values])[0])
 
-    # Gerar gráfico
+    # Gráfico PNG
     fig = exp.as_pyplot_figure(label=predicao)
-    plt.title(titulo_grafico)
-    plt.xlabel("Contribuição para a decisão")
-    colors = {'positive': 'green', 'negative': 'red'}
-    legend_elements = [
-        plt.Line2D([0], [0], color='red', lw=6, label='🔶 Laranja: Características que reforçaram a decisão de negar o crédito.'),
-        plt.Line2D([0], [0], color='green', lw=6, label='🔷 Azul: Características que sugerem que o crédito poderia ser concedido.')
-    ]
-    plt.legend(handles=legend_elements, loc='lower right')
-    plt.tight_layout()
-    fig.savefig(nome_arquivo + ".png", bbox_inches='tight')
-    plt.close(fig)
+    fig.set_size_inches(14, 6)
+    plt.title(titulo, fontsize=14)
+    legenda = (
+        "🟠 Laranja: Características que reforçaram a decisão do modelo.\n"
+        "🔵 Azul: Características que indicaram tendência contrária à decisão."
+    )
+    plt.figtext(0.99, 0.01, legenda, fontsize=9, ha='right', va='bottom', bbox=dict(facecolor='white', edgecolor='gray'))
+    os.makedirs("images", exist_ok=True)
+    img_path = f"images/{nome_arquivo}.png"
+    plt.savefig(img_path, bbox_inches='tight')
+    plt.close()
 
     # Frases explicativas
-    explicacoes = exp.as_list(label=predicao)
     frases = []
-    for nome, valor in explicacoes:
-        direcao = "reforçou a decisão" if valor < 0 else "sugeriu que o crédito poderia ser concedido"
-        frases.append(f"🔹 O fator {nome} {direcao}.")
-    return exp, frases
+    for feature, weight in exp.as_list(label=predicao):
+        if weight > 0:
+            frases.append(f"🟠 O fator **{feature}** contribuiu para classificar como **{['Mal Pagador', 'Bom Pagador'][predicao]}**.")
+        else:
+            frases.append(f"🔵 O fator **{feature}** indicou tendência oposta à classificação como **{['Mal Pagador', 'Bom Pagador'][predicao]}**.")
+    return exp, frases, img_path
 
-# Selecionar instância de bom pagador
-for i in range(len(X_test)):
-    if modelo.predict([X_test.iloc[i]])[0] == 1:
-        inst_bom = X_test.iloc[i].values
-        break
+# === Etapa 8: Gerar explicações ===
+exp_bom, frases_bom, img_bom = gerar_explicacao(inst_bom, "grafico_bom_pagador", "Por que o modelo classificou como 'Bom Pagador'?")
+exp_mal, frases_mal, img_mal = gerar_explicacao(inst_mal, "grafico_mal_pagador", "Por que o modelo classificou como 'Mal Pagador'?")
 
-# Selecionar instância de mal pagador
-for i in range(len(X_test)):
-    if modelo.predict([X_test.iloc[i]])[0] == 0:
-        inst_mal = X_test.iloc[i].values
-        break
+# === Etapa 9: Imprimir resumo no terminal ===
+print("\n✅ Gráficos gerados:")
+print(f"📊 Bom Pagador: {img_bom}")
+print(f"📊 Mal Pagador: {img_mal}\n")
 
-# Gerar explicações e gráficos
-_, frases_bom = gerar_explicacao(inst_bom, "../data/grafico_bom_pagador", "Por que o modelo classificou como 'Bom Pagador'?")
-_, frases_mal = gerar_explicacao(inst_mal, "../data/grafico_mal_pagador", "Por que o modelo classificou como 'Mal Pagador'?")
-
-# Exibir frases explicativas no terminal
-print("\n📘 Explicações - Bom Pagador:")
+print("🧾 Explicações do Bom Pagador:")
 for frase in frases_bom:
-    print(frase)
+    print("-", frase)
 
-print("\n📕 Explicações - Mal Pagador:")
+print("\n🧾 Explicações do Mal Pagador:")
 for frase in frases_mal:
-    print(frase)
+    print("-", frase)
