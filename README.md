@@ -1,40 +1,41 @@
-# 🧠 Decifrando a Caixa Preta: Tornando Modelos de IA Explicáveis com LIME
+# Decifrando a Caixa Preta: Tornando Modelos de IA Explicáveis com LIME
 
 Este projeto aplica técnicas de *Explainable Artificial Intelligence (XAI)* no contexto de concessão de crédito bancário. A partir de um modelo preditivo treinado com o **German Credit Data**, utilizamos a biblioteca [LIME](https://github.com/marcotcr/lime) para gerar explicações locais sobre as decisões do modelo para cada cliente.
 
 ---
 
-## 🎯 Objetivo
+## Objetivo
 
-- Criar um modelo de machine learning para classificar clientes como **bom** ou **mau risco de crédito**.
+- Criar um modelo de machine learning para classificar clientes como **bom** ou **mal pagador**.
 - Aplicar a técnica **LIME** para gerar explicações individuais, claras e interpretáveis para decisões de concessão ou negação de crédito.
 - Atender às necessidades de **clientes, gerentes e órgãos regulatórios**, promovendo transparência e confiabilidade.
 
 ---
 
-## 📊 Dataset: German Credit Data
+## Dataset: German Credit Data
 
 - **Fonte:** [UCI Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/statlog+(german+credit+data))
 - **Registros:** 1000 clientes
 - **Atributos:** 20 (como idade, status da conta, histórico de crédito, renda, emprego, etc.)
 - **Alvo:**  
   - 1 = Bom pagador  
-  - 2 = Mau pagador
+  - 2 = Mal pagador
 
-> Usamos o arquivo `german.data` (versão original), realizando o pré-processamento com `LabelEncoder`.
+> Utilizamos o arquivo original `german.data`, realizando o pré-processamento com `get_dummies` para variáveis categóricas.
 
 ---
 
-## ⚙️ Tecnologias Utilizadas
+## Tecnologias Utilizadas
 
 - Python 3
 - pandas, numpy, matplotlib
 - scikit-learn (modelo Random Forest)
 - LIME (Local Interpretable Model-Agnostic Explanations)
+- fpdf (geração de relatório em PDF)
 
 ---
 
-## 🧠 Modelo Preditivo
+## Modelo Preditivo
 
 - **Tipo:** Classificação binária
 - **Modelo escolhido:** `RandomForestClassifier`
@@ -45,27 +46,36 @@ Este projeto aplica técnicas de *Explainable Artificial Intelligence (XAI)* no 
 
 ---
 
-## 🔎 Etapas do Projeto
+## Etapas do Projeto
 
-1. Carregamento e nomeação das colunas do dataset
-2. Codificação dos atributos categóricos com `LabelEncoder`
+1. Leitura e nomeação das colunas do dataset
+2. Codificação automática com `pd.get_dummies()`
 3. Separação treino/teste com `train_test_split`
-4. Treinamento de um modelo de floresta aleatória
+4. Treinamento do modelo Random Forest
 5. Avaliação com `classification_report`
-6. Aplicação do LIME em uma predição individual
-7. Geração de gráficos e arquivos explicativos (`.png`, `.html`)
+6. Aplicação do LIME em 2 exemplos reais (1 bom pagador e 1 mal pagador)
+7. Geração de:
+   - Gráficos explicativos (`.png`)
+   - Relatório textual em terminal
+   - Relatório consolidado em PDF
 
 ---
 
-## 📈 Exemplo de Explicação com LIME
+## Exemplos Gerados com LIME
 
-Abaixo está um gráfico real gerado pelo projeto, indicando os fatores que influenciaram a decisão do modelo para um cliente específico.
+### Bom Pagador
 
-![lime](images/lime_explanation.png)
+![Gráfico Bom Pagador](data/grafico_bom_pagador.png)
+
+### Mal Pagador
+
+![Gráfico Mal Pagador](data/grafico_mal_pagador.png)
+
+> As explicações detalhadas também são salvas em `data/explicacoes_lime.pdf`
 
 ---
 
-## ▶️ Como Executar o Projeto
+## Como Executar o Projeto
 
 1. Clone este repositório:
 ```bash
@@ -78,8 +88,7 @@ cd german-credit-xai-lime
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 ```
-
-3. Instale as dependências:
+4. Instale as dependências:
 ```bash
 pip install -r requirements.txt
 ```
@@ -89,32 +98,32 @@ pip install -r requirements.txt
 python src/model_lime_explainer.py
 ```
 
-5. Verifique os resultados:
+5. Verifique os resultados na pasta data/:
+```bash
+python src/model_lime_explainer.py
+```
 
-- Gráfico: images/lime_explanation.png
-- Versão interativa: images/lime_explanation.html
-
-# 📁 Estrutura do Projeto
-
+- Estrutura do Projeto
 ```bash
 german-credit-xai-lime/
 ├── data/
-│   └── german.data
-├── images/
-│   └── lime_explanation.png
-│   └── lime_explanation.html
+│   ├── german.data
+│   ├── grafico_bom_pagador.png
+│   ├── grafico_mal_pagador.png
+│   └── explicacoes_lime.pdf
 ├── src/
 │   └── model_lime_explainer.py
 ├── requirements.txt
-├── README.md
-└── .gitignore
+└── README.md
+
 ```
+- Referências
+Ribeiro et al. (2016) – "Why Should I Trust You?" Explaining the Predictions of Any Classifier
 
-## 📚 Referências
-- Ribeiro et al. (2016) – "Why Should I Trust You?"
-- Dataset: Statlog (German Credit)
-- LIME Docs: https://marcotcr.github.io/lime/tutorials.html
+Dataset: Statlog (German Credit Data) – UCI Repository
 
-## 👨‍🎓 Sobre
+LIME Documentation: https://marcotcr.github.io/lime/tutorials.html
+
+- Sobre
 Projeto desenvolvido para a disciplina Explainable AI (XAI), com foco em interpretabilidade de modelos preditivos aplicados à concessão de crédito bancário.
-
+   
