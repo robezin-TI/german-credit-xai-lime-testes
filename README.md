@@ -79,7 +79,7 @@ Este projeto aplica técnicas de *Explainable Artificial Intelligence (XAI)* no 
 
 1. Clone este repositório:
 ```bash
-git clone https://github.com/seu-usuario/german-credit-xai-lime.git
+git clone https://github.com/seu-usuario/german-credit-xai-lime-testes.git
 cd german-credit-xai-lime
 ```
 
